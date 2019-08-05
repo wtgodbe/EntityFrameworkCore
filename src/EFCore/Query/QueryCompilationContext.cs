@@ -9,6 +9,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Query.Internal;
 
 namespace Microsoft.EntityFrameworkCore.Query
 {
@@ -28,6 +29,8 @@ namespace Microsoft.EntityFrameworkCore.Query
         /// </summary>
         private Dictionary<string, LambdaExpression> _runtimeParameters;
 
+        private readonly Parameters _parameters;
+
         public QueryCompilationContext(
             QueryCompilationContextDependencies dependencies,
             bool async)
@@ -40,20 +43,26 @@ namespace Microsoft.EntityFrameworkCore.Query
             ContextOptions = dependencies.ContextOptions;
             ContextType = context.GetType();
             Logger = dependencies.Logger;
+            EvaluatableExpressionFilter = dependencies.EvaluatableExpressionFilter; 
 
             _queryOptimizerFactory = dependencies.QueryOptimizerFactory;
             _queryableMethodTranslatingExpressionVisitorFactory = dependencies.QueryableMethodTranslatingExpressionVisitorFactory;
             _shapedQueryOptimizerFactory = dependencies.ShapedQueryOptimizerFactory;
             _shapedQueryCompilingExpressionVisitorFactory = dependencies.ShapedQueryCompilingExpressionVisitorFactory;
+            _parameters = new Parameters();
         }
 
         public virtual bool IsAsync { get; }
         public virtual IModel Model { get; }
         public virtual IDbContextOptions ContextOptions { get; }
         public virtual bool IsTracking { get; internal set; }
+        public virtual bool IgnoreQueryFilters { get; internal set; }
         public virtual ISet<string> Tags { get; } = new HashSet<string>();
         public virtual IDiagnosticsLogger<DbLoggerCategory.Query> Logger { get; }
+        public virtual IEvaluatableExpressionFilter EvaluatableExpressionFilter { get; }
         public virtual Type ContextType { get; }
+
+        internal virtual IParameterValues ParameterValues => _parameters;
 
         public virtual void AddTag(string tag)
         {
@@ -70,6 +79,16 @@ namespace Microsoft.EntityFrameworkCore.Query
             // Inject actual entity materializer
             // Inject tracking
             query = _shapedQueryCompilingExpressionVisitorFactory.Create(this).Visit(query);
+
+            var setFilterParameterExpressions
+                = CreateSetFilterParametersExpressions(out var contextVariableExpression);
+
+            if (setFilterParameterExpressions != null)
+            {
+                query = Expression.Block(
+                    new[] { contextVariableExpression },
+                    setFilterParameterExpressions.Concat(new[] { query }));
+            }
 
             // If any additional parameters were added during the compilation phase (e.g. entity equality ID expression),
             // wrap the query with code adding those parameters to the query context
@@ -127,5 +146,75 @@ namespace Microsoft.EntityFrameworkCore.Query
             = typeof(QueryContext)
                 .GetTypeInfo()
                 .GetDeclaredMethod(nameof(QueryContext.Add));
+
+        private static readonly PropertyInfo _queryContextContextPropertyInfo
+           = typeof(QueryContext)
+               .GetTypeInfo()
+               .GetDeclaredProperty(nameof(QueryContext.Context));
+
+        private IEnumerable<Expression> CreateSetFilterParametersExpressions(out ParameterExpression contextVariableExpression)
+        {
+            contextVariableExpression = null;
+
+            if (_parameters.ParameterValues.Count == 0)
+            {
+                return null;
+            }
+
+            contextVariableExpression = Expression.Variable(ContextType, "context");
+
+            var blockExpressions
+               = new List<Expression>
+               {
+                    Expression.Assign(
+                        contextVariableExpression,
+                        Expression.Convert(
+                            Expression.Property(
+                                QueryContextParameter,
+                                _queryContextContextPropertyInfo),
+                            ContextType))
+               };
+
+            foreach (var keyValuePair in _parameters.ParameterValues)
+            {
+                blockExpressions.Add(
+                    Expression.Call(
+                        QueryContextParameter,
+                        _queryContextAddParameterMethodInfo,
+                        Expression.Constant(keyValuePair.Key),
+                        Expression.Convert(
+                            Expression.Invoke(
+                                (LambdaExpression)keyValuePair.Value,
+                                contextVariableExpression),
+                            typeof(object))));
+            }
+
+            return blockExpressions;
+        }
+
+        private class Parameters : IParameterValues
+        {
+            private readonly IDictionary<string, object> _parameterValues = new Dictionary<string, object>();
+
+            public IReadOnlyDictionary<string, object> ParameterValues => (IReadOnlyDictionary<string, object>)_parameterValues;
+
+            public virtual void Add(string name, object value)
+            {
+                _parameterValues.Add(name, value);
+            }
+
+            public virtual void Replace(string name, object value)
+            {
+                _parameterValues[name] = value;
+            }
+
+            public virtual object Remove(string name)
+            {
+                var value = _parameterValues[name];
+                _parameterValues.Remove(name);
+
+                return value;
+            }
+        }
     }
 }

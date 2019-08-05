@@ -19,6 +19,7 @@ namespace Microsoft.EntityFrameworkCore.Query
         private readonly IndentedStringBuilder _stringBuilder;
         private readonly Dictionary<ParameterExpression, string> _parametersInScope;
         private readonly List<ParameterExpression> _namelessParameters;
+        private readonly List<ParameterExpression> _encounteredParameters;
 
         private readonly Dictionary<ExpressionType, string> _binaryOperandMap = new Dictionary<ExpressionType, string>
         {
@@ -47,6 +48,7 @@ namespace Microsoft.EntityFrameworkCore.Query
             _stringBuilder = new IndentedStringBuilder();
             _parametersInScope = new Dictionary<ParameterExpression, string>();
             _namelessParameters = new List<ParameterExpression>();
+            _encounteredParameters = new List<ParameterExpression>();
         }
 
         public virtual IndentedStringBuilder StringBuilder => _stringBuilder;
@@ -474,7 +476,17 @@ namespace Microsoft.EntityFrameworkCore.Query
                     _parametersInScope.Add(parameter, parameterName);
                 }
 
-                _stringBuilder.Append(parameter.Type.ShortDisplayName() + " " + parameterName);
+                var parameterIndex = _encounteredParameters.Count;
+                if (_encounteredParameters.Contains(parameter))
+                {
+                    parameterIndex = _encounteredParameters.IndexOf(parameter);
+                }
+                else
+                {
+                    _encounteredParameters.Add(parameter);
+                }
+
+                _stringBuilder.Append(parameter.Type.ShortDisplayName() + " " + parameterName + "{" + parameterIndex + "}");
 
                 if (parameter != lambdaExpression.Parameters.Last())
                 {
@@ -778,6 +790,18 @@ namespace Microsoft.EntityFrameworkCore.Query
                 Append(parameterExpression.Name);
                 Append(")");
             }
+
+            var parameterIndex = _encounteredParameters.Count;
+            if (_encounteredParameters.Contains(parameterExpression))
+            {
+                parameterIndex = _encounteredParameters.IndexOf(parameterExpression);
+            }
+            else
+            {
+                _encounteredParameters.Add(parameterExpression);
+            }
+
+            _stringBuilder.Append("{" + parameterIndex + "}");
 
             return parameterExpression;
         }

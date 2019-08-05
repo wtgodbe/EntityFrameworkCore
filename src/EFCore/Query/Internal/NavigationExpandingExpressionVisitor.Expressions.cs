@@ -12,7 +12,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 {
     public partial class NavigationExpandingExpressionVisitor
     {
-        public class NavigationExpansionExpression : Expression
+        public class NavigationExpansionExpression : Expression, IPrintable
         {
             private readonly List<(MethodInfo OrderingMethod, Expression KeySelector)> _pendingOrderings
                 = new List<(MethodInfo OrderingMethod, Expression KeySelector)>();
@@ -81,13 +81,26 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
             protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
 
+            public virtual void Print(ExpressionPrinter expressionPrinter)
+            {
+                expressionPrinter.Visit(Source);
+                expressionPrinter.StringBuilder.Append(".PendingSelector(");
+                expressionPrinter.Visit(PendingSelector);
+                expressionPrinter.StringBuilder.Append(")");
+
+                if (CardinalityReducingGenericMethodInfo != null)
+                {
+                    expressionPrinter.StringBuilder.Append("." + CardinalityReducingGenericMethodInfo.Name + "()");
+                }
+            }
+
             public override ExpressionType NodeType => ExpressionType.Extension;
             public override Type Type => CardinalityReducingGenericMethodInfo == null
                 ? typeof(IQueryable<>).MakeGenericType(PendingSelector.Type)
                 : PendingSelector.Type;
         }
 
-        public class NavigationTreeExpression : NavigationTreeNode
+        public class NavigationTreeExpression : NavigationTreeNode, IPrintable
         {
             public NavigationTreeExpression(Expression value)
                 : base(null, null)
@@ -102,9 +115,27 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 return this;
             }
             public override Type Type => Value.Type;
+
+            public override void Print(ExpressionPrinter expressionPrinter)
+            {
+                expressionPrinter.Append("NAVIGATION_TREE_EXPRESSION(");
+
+                var parent = Parent;
+                var currentParameter = CurrentParameter;
+                while (currentParameter == null)
+                {
+                    currentParameter = parent.CurrentParameter;
+                    parent = parent.Parent;
+                }
+
+                expressionPrinter.Visit(currentParameter);
+                expressionPrinter.Append(" | ");
+                expressionPrinter.Visit(Value);
+                expressionPrinter.Append(")");
+            }
         }
 
-        public class EntityReference : Expression
+        public class EntityReference : Expression, IPrintable
         {
             public EntityReference(IEntityType entityType)
             {
@@ -148,13 +179,26 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 IsOptional = true;
             }
 
+            public virtual void Print(ExpressionPrinter expressionPrinter)
+            {
+                expressionPrinter.Append("ENTITY_REFERENCE(");
+                expressionPrinter.Append(EntityType.DisplayName());
+
+                if (IncludePaths.Count > 0)
+                {
+                    expressionPrinter.Append(" | IncludePaths: " + string.Join(".", IncludePaths.Select(ip => ip.Key.Name)));
+                }
+
+                expressionPrinter.Append(")");
+            }
+
             public virtual bool IsOptional { get; private set; }
 
             public override ExpressionType NodeType => ExpressionType.Extension;
             public override Type Type => EntityType.ClrType;
         }
 
-        public class NavigationTreeNode : Expression
+        public class NavigationTreeNode : Expression, IPrintable
         {
             private NavigationTreeNode _parent;
 
@@ -202,6 +246,13 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 return Parent.Left == this
                     ? MakeMemberAccess(parentExperssion, parentExperssion.Type.GetTypeInfo().GetMember("Outer")[0])
                     : MakeMemberAccess(parentExperssion, parentExperssion.Type.GetTypeInfo().GetMember("Inner")[0]);
+            }
+
+            public virtual void Print(ExpressionPrinter expressionPrinter)
+            {
+                expressionPrinter.Append("NAVIGATION_TREE_NODE(");
+                expressionPrinter.Visit(CurrentParameter);
+                expressionPrinter.Append(")");
             }
         }
 

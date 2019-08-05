@@ -170,7 +170,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                     innerEntityReference.SetIncludePaths(innerIncludeTreeNode);
                 }
 
-                var innerParameter = Expression.Parameter(innerSource.SourceElementType, "i");
+                var innerParameter = Expression.Parameter(innerSource.Type.GetSequenceType(), "i");
                 Expression outerKey;
                 if (root is NavigationExpansionExpression innerNavigationExpansionExpression
                     && innerNavigationExpansionExpression.CardinalityReducingGenericMethodInfo != null)
@@ -196,7 +196,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                             : navigation.ForeignKey.PrincipalKey.Properties);
                 }
 
-                var innerKey = CreateKeyAccessExpression(innerParameter,
+                var innerKey = CreateKeyAccessExpression(innerSource.PendingSelector,
                     navigation.IsDependentToPrincipal()
                         ? navigation.ForeignKey.PrincipalKey.Properties
                         : navigation.ForeignKey.Properties);
@@ -218,15 +218,12 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 {
                     // This is intentionally deferred to be applied to innerSource.Source
                     // Since outerKey's reference could change if a reference navigation is expanded afterwards
-                    var correlationPredicate = _navigationExpandingExpressionVisitor.ExpandNavigationsInLambdaExpression(
-                        innerSource,
-                        Expression.Lambda(Expression.Equal(outerKey, innerKey), innerParameter));
-
                     var subquery = Expression.Call(
-                            QueryableMethodProvider.WhereMethodInfo.MakeGenericMethod(innerSource.SourceElementType),
-                            innerSource,
-                            Expression.Quote(
-                                Expression.Lambda(correlationPredicate, innerSource.CurrentParameter)));
+                        QueryableMethodProvider.WhereMethodInfo.MakeGenericMethod(innerSource.Type.GetSequenceType()),
+                        innerSource,
+                        Expression.Quote(
+                            Expression.Lambda(
+                                Expression.Equal(outerKey, innerKey), innerParameter)));
 
                     return new MaterializeCollectionNavigationExpression(subquery, navigation);
                 }
@@ -241,8 +238,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         innerSource.CurrentParameter);
 
                     var resultSelectorOuterParameter = Expression.Parameter(_source.SourceElementType, "o");
-                    var resultSelectorInnerParameter = Expression.Parameter(innerQueryableType, "i");
-                    var resultType = TransparentIdentifierFactory.Create(_source.SourceElementType, innerQueryableType);
+                    var resultSelectorInnerParameter = Expression.Parameter(innerSource.SourceElementType, "i");
+                    var resultType = TransparentIdentifierFactory.Create(_source.SourceElementType, innerSource.SourceElementType);
 
                     var transparentIdentifierOuterMemberInfo = resultType.GetTypeInfo().GetDeclaredField("Outer");
                     var transparentIdentifierInnerMemberInfo = resultType.GetTypeInfo().GetDeclaredField("Inner");
@@ -269,11 +266,11 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                             ? QueryableMethodProvider.JoinMethodInfo
                             : QueryableExtensions.LeftJoinMethodInfo).MakeGenericMethod(
                                 _source.SourceElementType,
-                                innerQueryableType,
+                                innerSource.SourceElementType,
                                 outerKeySelector.ReturnType,
                                 resultSelector.ReturnType),
                         _source.Source,
-                        innerQueryable,
+                        innerSource.Source,
                         outerKeySelector,
                         innerKeySelector,
                         resultSelector));

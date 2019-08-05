@@ -5,6 +5,7 @@ using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Query.Internal;
 using Microsoft.EntityFrameworkCore.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -63,7 +64,8 @@ namespace Microsoft.EntityFrameworkCore.Query
             [NotNull] IShapedQueryCompilingExpressionVisitorFactory shapedQueryCompilingExpressionVisitorFactory,
             [NotNull] ICurrentDbContext currentContext,
             [NotNull] IDbContextOptions contextOptions,
-            [NotNull] IDiagnosticsLogger<DbLoggerCategory.Query> logger)
+            [NotNull] IDiagnosticsLogger<DbLoggerCategory.Query> logger,
+            [NotNull] IEvaluatableExpressionFilter evaluatableExpressionFilter)
         {
             Check.NotNull(model, nameof(model));
             Check.NotNull(queryOptimizerFactory, nameof(queryOptimizerFactory));
@@ -73,6 +75,7 @@ namespace Microsoft.EntityFrameworkCore.Query
             Check.NotNull(currentContext, nameof(currentContext));
             Check.NotNull(contextOptions, nameof(contextOptions));
             Check.NotNull(logger, nameof(logger));
+            Check.NotNull(evaluatableExpressionFilter, nameof(evaluatableExpressionFilter));
 
             CurrentContext = currentContext;
             Model = model;
@@ -82,6 +85,7 @@ namespace Microsoft.EntityFrameworkCore.Query
             ShapedQueryCompilingExpressionVisitorFactory = shapedQueryCompilingExpressionVisitorFactory;
             ContextOptions = contextOptions;
             Logger = logger;
+            EvaluatableExpressionFilter = evaluatableExpressionFilter;
         }
 
         /// <summary>
@@ -125,6 +129,11 @@ namespace Microsoft.EntityFrameworkCore.Query
         public IDiagnosticsLogger<DbLoggerCategory.Query> Logger { get; }
 
         /// <summary>
+        ///     Evaluatable expression filter.
+        /// </summary>
+        public IEvaluatableExpressionFilter EvaluatableExpressionFilter { get; }
+
+        /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
         /// </summary>
         /// <param name="model"> A replacement for the current dependency of this type. </param>
@@ -138,7 +147,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -154,7 +164,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -171,7 +182,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -187,7 +199,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -204,7 +217,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 shapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -220,7 +234,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 currentContext,
                 ContextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -236,7 +251,8 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 contextOptions,
-                Logger);
+                Logger,
+                EvaluatableExpressionFilter);
 
         /// <summary>
         ///     Clones this dependency parameter object with one service replaced.
@@ -252,6 +268,24 @@ namespace Microsoft.EntityFrameworkCore.Query
                 ShapedQueryCompilingExpressionVisitorFactory,
                 CurrentContext,
                 ContextOptions,
-                logger);
+                logger,
+                EvaluatableExpressionFilter);
+
+        /// <summary>
+        ///     Clones this dependency parameter object with one service replaced.
+        /// </summary>
+        /// <param name="evaluatableExpressionFilter"> A replacement for the current dependency of this type. </param>
+        /// <returns> A new parameter object with the given service replaced. </returns>
+        public QueryCompilationContextDependencies With([NotNull] IEvaluatableExpressionFilter evaluatableExpressionFilter)
+            => new QueryCompilationContextDependencies(
+                Model,
+                QueryOptimizerFactory,
+                QueryableMethodTranslatingExpressionVisitorFactory,
+                ShapedQueryOptimizerFactory,
+                ShapedQueryCompilingExpressionVisitorFactory,
+                CurrentContext,
+                ContextOptions,
+                Logger,
+                evaluatableExpressionFilter);
     }
 }

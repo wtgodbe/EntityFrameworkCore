@@ -2,38 +2,35 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices.ComTypes;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using Microsoft.EntityFrameworkCore.Query.Internal;
 
 namespace Microsoft.EntityFrameworkCore.Query.Internal
 {
     public partial class NavigationExpandingExpressionVisitor : ExpressionVisitor
     {
+        private readonly QueryCompilationContext _queryCompilationContext;
         private readonly IModel _model;
         private readonly bool _isTracking;
         private readonly PendingSelectorExpandingExpressionVisitor _pendingSelectorExpandingExpressionVisitor;
         private readonly SubqueryMemberPushdownExpressionVisitor _subqueryMemberPushdownExpressionVisitor;
         private readonly ReducingExpressionVisitor _reducingExpressionVisitor;
         private readonly ISet<string> _parameterNames = new HashSet<string>();
+        private readonly List<IEntityType> _appliedQueryFilters = new List<IEntityType>();
+
         private static readonly MethodInfo _enumerableToListMethodInfo = typeof(Enumerable).GetTypeInfo()
             .GetDeclaredMethods(nameof(Enumerable.ToList))
             .Single(mi => mi.GetParameters().Length == 1);
 
         public NavigationExpandingExpressionVisitor(QueryCompilationContext queryCompilationContext)
         {
+            _queryCompilationContext = queryCompilationContext;
             _model = queryCompilationContext.Model;
             _isTracking = queryCompilationContext.IsTracking;
             _pendingSelectorExpandingExpressionVisitor = new PendingSelectorExpandingExpressionVisitor(this);
@@ -74,7 +71,44 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 var currentTree = new NavigationTreeExpression(entityReference);
                 var parameterName = GetParameterName(entityType.ShortName()[0].ToString().ToLower());
 
-                return new NavigationExpansionExpression(constantExpression, currentTree, currentTree, parameterName);
+                var result = (Expression)new NavigationExpansionExpression(constantExpression, currentTree, currentTree, parameterName);
+
+                var rootEntityType = entityType.RootType();
+                var queryFilterAnnotation = rootEntityType.FindAnnotation("QueryFilter");
+                if (queryFilterAnnotation != null
+                    && !_queryCompilationContext.IgnoreQueryFilters
+                    && !_appliedQueryFilters.Contains(rootEntityType))
+                {
+                    _appliedQueryFilters.Add(rootEntityType);
+                    var filterPredicate = (LambdaExpression)queryFilterAnnotation.Value;
+
+                    var parameterExtractingExpressionVisitor = new ParameterExtractingExpressionVisitor(
+                        _queryCompilationContext.EvaluatableExpressionFilter,
+                        _queryCompilationContext.ParameterValues,
+                        _queryCompilationContext.ContextType,
+                        _queryCompilationContext.Logger,
+                        parameterize: false,
+                        generateContextAccessors: true);
+
+                    filterPredicate = (LambdaExpression)parameterExtractingExpressionVisitor.ExtractParameters(filterPredicate);
+                    var sequenceType = result.Type.GetSequenceType();
+
+                    // if we are constructing EntityQueryable of a derived type, we need to re-map filter predicate to the correct derived type
+                    var filterPredicateParameter = filterPredicate.Parameters[0];
+                    if (filterPredicateParameter.Type != sequenceType)
+                    {
+                        var newFilterPredicateParameter = Expression.Parameter(sequenceType, filterPredicateParameter.Name);
+                        var newFilterPredicateBody = ReplacingExpressionVisitor.Replace(filterPredicateParameter, newFilterPredicateParameter, filterPredicate.Body);
+                        filterPredicate = Expression.Lambda(newFilterPredicateBody, newFilterPredicateParameter);
+                    }
+
+                    var whereMethod = QueryableMethodProvider.WhereMethodInfo.MakeGenericMethod(result.Type.GetSequenceType());
+                    var filteredResult = (Expression)Expression.Call(whereMethod, result, filterPredicate);
+
+                    result = Visit(filteredResult);
+                }
+
+                return result;
             }
 
             return base.VisitConstant(constantExpression);
@@ -1182,6 +1216,20 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         {
             var lambdaBody = ReplacingExpressionVisitor.Replace(
                 lambdaExpression.Parameters[0],
+                source.PendingSelector,
+                lambdaExpression.Body);
+
+            return ExpandNavigationsInExpression(source, lambdaBody);
+        }
+
+
+        private Expression ExpandNavigationsInLambdaExpression(
+            NavigationExpansionExpression source,
+            LambdaExpression lambdaExpression,
+            Expression expressionToReplace)
+        {
+            var lambdaBody = ReplacingExpressionVisitor.Replace(
+                expressionToReplace,
                 source.PendingSelector,
                 lambdaExpression.Body);
 

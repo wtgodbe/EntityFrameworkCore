@@ -21,10 +21,9 @@ namespace Microsoft.EntityFrameworkCore
             typeof(GraphUpdatesTestBase<>),                // issue #15318
             typeof(ProxyGraphUpdatesTestBase<>),           // issue #15318
             typeof(ComplexNavigationsWeakQueryTestBase<>), // issue #15285
-            typeof(FiltersInheritanceTestBase<>),          // issue #15264
-            typeof(FiltersTestBase<>),                     // issue #15264
             typeof(OwnedQueryTestBase<>),                  // issue #15285
             // Query pipeline
+            typeof(FiltersInheritanceTestBase<>),
             typeof(SimpleQueryTestBase<>),
             typeof(GroupByQueryTestBase<>),
             typeof(ConcurrencyDetectorTestBase<>),
