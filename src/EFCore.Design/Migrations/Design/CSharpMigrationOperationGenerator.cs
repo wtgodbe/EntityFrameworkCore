@@ -768,6 +768,14 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Design
                         .Append(Code.Literal(operation.Comment));
                 }
 
+                if (operation.OldTable.Comment != null)
+                {
+                    builder
+                        .AppendLine(",")
+                        .Append("oldComment: ")
+                        .Append(Code.Literal(operation.OldTable.Comment));
+                }
+
                 builder.Append(")");
 
                 Annotations(operation.GetAnnotations(), builder);

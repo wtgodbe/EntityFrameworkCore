@@ -480,11 +480,13 @@ namespace Microsoft.EntityFrameworkCore.Migrations
         /// <param name="name"> The table name. </param>
         /// <param name="schema"> The schema that contains the table, or <c>null</c> to use the default schema. </param>
         /// <param name="comment"> A comment to associate with the table. </param>
+        /// <param name="oldComment"> The previous comment to associate with the table. </param>
         /// <returns> A builder to allow annotations to be added to the operation. </returns>
         public virtual AlterOperationBuilder<AlterTableOperation> AlterTable(
             [NotNull] string name,
             [CanBeNull] string schema = null,
-            [CanBeNull] string comment = null)
+            [CanBeNull] string comment = null,
+            [CanBeNull] string oldComment = null)
         {
             Check.NotEmpty(name, nameof(name));
 
@@ -492,7 +494,11 @@ namespace Microsoft.EntityFrameworkCore.Migrations
             {
                 Schema = schema,
                 Name = name,
-                Comment = comment
+                Comment = comment,
+                OldTable = new TableOperation
+                {
+                    Comment = oldComment
+                }
             };
             Operations.Add(operation);
 

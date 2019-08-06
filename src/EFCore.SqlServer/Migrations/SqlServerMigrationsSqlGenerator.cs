@@ -40,6 +40,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
         private IReadOnlyList<MigrationOperation> _operations;
         private int _variableCounter;
 
+        private const string DefaultSchema = "dbo";
         /// <summary>
         ///     Creates a new <see cref="SqlServerMigrationsSqlGenerator"/> instance.
         /// </summary>
@@ -137,7 +138,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
 
                 if (operation.Comment != null)
                 {
-                    AddDropComment(builder, operation.Comment, null, operation.Schema, operation.Table, operation.Name);
+                    GenerateColumnComment(builder, model, operation.Comment, null, operation.Schema, operation.Table, operation.Name);
                 }
 
                 builder.EndCommand(suppressTransaction: IsMemoryOptimized(operation, model, operation.Schema, operation.Table));
@@ -339,7 +340,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
 
             if (operation.OldColumn.Comment != operation.Comment)
             {
-                AddDropComment(builder, operation.Comment, operation.OldColumn.Comment, operation.Schema, operation.Table, operation.Name);
+                GenerateColumnComment(builder, model, operation.Comment, operation.OldColumn.Comment, operation.Schema, operation.Table, operation.Name);
             }
 
             if (narrowed)
@@ -478,12 +479,12 @@ namespace Microsoft.EntityFrameworkCore.Migrations
 
             if (operation.Comment != null)
             {
-                AddDropComment(builder, operation.Comment, null, operation.Schema, operation.Name);
+                GenerateTableComment(builder, model, operation.Comment, null, operation.Schema, operation.Name);
             }
 
             foreach (var column in operation.Columns.Where(c => c.Comment != null))
             {
-                AddDropComment(builder, column.Comment, null, operation.Schema, operation.Name, column.Name);
+                GenerateColumnComment(builder, model, column.Comment, null, operation.Schema, operation.Name, column.Name);
             }
 
             builder.EndCommand(suppressTransaction: memoryOptimized);
@@ -671,7 +672,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
             Check.NotNull(operation, nameof(operation));
             Check.NotNull(builder, nameof(builder));
 
-            if (string.Equals(operation.Name, "DBO", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(operation.Name, DefaultSchema, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -965,7 +966,12 @@ namespace Microsoft.EntityFrameworkCore.Migrations
                 throw new InvalidOperationException(SqlServerStrings.AlterMemoryOptimizedTable);
             }
 
-            base.Generate(operation, model, builder);
+            if (operation.OldTable.Comment != operation.Comment)
+            {
+                GenerateTableComment(builder, model, operation.Comment, operation.OldTable.Comment, operation.Schema, operation.Name);
+            }
+
+            builder.EndCommand(suppressTransaction: IsMemoryOptimized(operation, model, operation.Schema, operation.Name));
         }
 
         /// <summary>
@@ -1636,27 +1642,74 @@ namespace Microsoft.EntityFrameworkCore.Migrations
 
         /// <summary>
         ///     <para>
-        ///         Generates add and drop commands for comments on tables and columns.
+        ///         Generates add and drop commands for comments on tables.
         ///     </para>
         /// </summary>
         /// <param name="builder"> The command builder to use to build the commands. </param>
+        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
         /// <param name="comment"> The new comment to be applied. </param>
         /// <param name="oldComment"> The previous comment. </param>
         /// <param name="schema"> The schema of the table. </param>
         /// <param name="table"> The name of the table. </param>
-        /// <param name="columnName"> The column name if comment is being applied to a column. </param>
-        protected virtual void AddDropComment(
+        protected virtual void GenerateTableComment(
             [NotNull] MigrationCommandListBuilder builder,
+            [CanBeNull] IModel model,
             [CanBeNull] string comment,
             [CanBeNull] string oldComment,
-            [NotNull] string schema,
-            [NotNull] string table,
-            [CanBeNull] string columnName = null)
+            [CanBeNull] string schema,
+            [NotNull] string table)
         {
             if (comment == oldComment)
             {
                 return;
             }
+
+            schema ??= model?.GetDefaultSchema() ?? DefaultSchema;
+
+            if (oldComment != null)
+            {
+                GenerateDropExtendedProperty(builder,
+                    "Comment",
+                    "Schema", schema,
+                    "Table", table);
+            }
+
+            if (comment != null)
+            {
+                GenerateAddExtendedProperty(builder,
+                    "Comment", comment,
+                    "Schema", schema,
+                    "Table", table);
+            }
+        }
+
+        /// <summary>
+        ///     <para>
+        ///         Generates add and drop commands for comments on columns.
+        ///     </para>
+        /// </summary>
+        /// <param name="builder"> The command builder to use to build the commands. </param>
+        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="comment"> The new comment to be applied. </param>
+        /// <param name="oldComment"> The previous comment. </param>
+        /// <param name="schema"> The schema of the table. </param>
+        /// <param name="table"> The name of the table. </param>
+        /// <param name="columnName"> The name of the column. </param>
+        protected virtual void GenerateColumnComment(
+            [NotNull] MigrationCommandListBuilder builder,
+            [CanBeNull] IModel model,
+            [CanBeNull] string comment,
+            [CanBeNull] string oldComment,
+            [CanBeNull] string schema,
+            [NotNull] string table,
+            [NotNull] string columnName)
+        {
+            if (comment == oldComment)
+            {
+                return;
+            }
+
+            schema ??= model?.GetDefaultSchema() ?? DefaultSchema;
 
             if (oldComment != null)
             {
@@ -1664,7 +1717,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
                     "Comment",
                     "Schema", schema,
                     "Table", table,
-                    columnName == null ? null : "Column", columnName);
+                    "Column", columnName);
             }
 
             if (comment != null)
@@ -1673,7 +1726,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
                     "Comment", comment,
                     "Schema", schema,
                     "Table", table,
-                    columnName == null ? null : "Column", columnName);
+                    "Column", columnName);
             }
         }
 

@@ -52,6 +52,76 @@ EXEC sp_addextendedproperty @name = N'Comment', @value = N'Employer ID comment',
         }
 
         [ConditionalFact]
+        public void AlterTableOperation_with_new_comment()
+        {
+            Generate(
+                new AlterTableOperation
+                {
+                    Name = "People",
+                    Schema = "dbo",
+                    Comment = "My Comment"
+                });
+
+            AssertSql(
+                @"EXEC sp_addextendedproperty @name = N'Comment', @value = N'My Comment', @level0type = N'Schema', @level0name = N'dbo', @level1type = N'Table', @level1name = N'People';
+");
+        }
+
+        [ConditionalFact]
+        public void AlterTableOperation_with_different_comment_to_existing()
+        {
+            Generate(
+                modelBuilder => modelBuilder
+                    .HasAnnotation(CoreAnnotationNames.ProductVersion, "1.1.0")
+                    .Entity(
+                        "Person", x =>
+                        {
+                            x.HasComment("My Comment");
+                        }),
+                new AlterTableOperation
+                {
+                    Schema = "dbo",
+                    Name = "People",
+                    Comment = "My Comment 2",
+                    OldTable = new TableOperation
+                    {
+                        Comment = "My Comment"
+                    }
+                });
+
+            AssertSql(
+                @"EXEC sp_dropextendedproperty @name = N'Comment', @level0type = N'Schema', @level0name = N'dbo', @level1type = N'Table', @level1name = N'People';
+EXEC sp_addextendedproperty @name = N'Comment', @value = N'My Comment 2', @level0type = N'Schema', @level0name = N'dbo', @level1type = N'Table', @level1name = N'People';
+");
+        }
+
+        [ConditionalFact]
+        public void AlterTableOperation_removing_comment()
+        {
+            Generate(
+                modelBuilder => modelBuilder
+                    .HasAnnotation(CoreAnnotationNames.ProductVersion, "1.1.0")
+                    .Entity(
+                        "Person", x =>
+                        {
+                            x.HasComment("My Comment");
+                        }),
+                new AlterTableOperation
+                {
+                    Schema = "dbo",
+                    Name = "People",
+                    OldTable = new TableOperation
+                    {
+                        Comment = "My Comment"
+                    }
+                });
+
+            AssertSql(
+                @"EXEC sp_dropextendedproperty @name = N'Comment', @level0type = N'Schema', @level0name = N'dbo', @level1type = N'Table', @level1name = N'People';
+");
+        }
+
+        [ConditionalFact]
         public virtual void AddColumnOperation_with_computedSql()
         {
             Generate(
@@ -255,7 +325,7 @@ EXEC sp_addextendedproperty @name = N'Comment', @value = N'Employer ID comment',
 
             AssertSql(
                 @"ALTER TABLE [People] ADD [FullName] nvarchar(max) NOT NULL;
-EXEC sp_addextendedproperty @name = N'Comment', @value = N'My comment', @level0type = N'Schema', @level0name = NULL, @level1type = N'Table', @level1name = N'People', @level2type = N'Column', @level2name = N'FullName';
+EXEC sp_addextendedproperty @name = N'Comment', @value = N'My comment', @level0type = N'Schema', @level0name = N'dbo', @level1type = N'Table', @level1name = N'People', @level2type = N'Column', @level2name = N'FullName';
 ");
         }
 
@@ -1024,7 +1094,7 @@ EXEC sp_addextendedproperty @name = N'Comment', @value = N'My Comment 2', @level
         }
 
         [ConditionalFact]
-        public void AlterColumnOperation_by_removing_comment()
+        public void AlterColumnOperation_removing_comment()
         {
             Generate(
                 modelBuilder => modelBuilder
