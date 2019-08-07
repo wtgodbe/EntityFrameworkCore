@@ -40,12 +40,6 @@ namespace Microsoft.EntityFrameworkCore.Query
         }
 
         [ConditionalTheory(Skip = "issue #16963")]
-        public override void Include_collection(bool useString)
-        {
-            base.Include_collection(useString);
-        }
-
-        [ConditionalTheory(Skip = "issue #16963")]
         public override void Include_collection_then_reference(bool useString)
         {
             base.Include_collection_then_reference(useString);
