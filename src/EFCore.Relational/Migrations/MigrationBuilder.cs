@@ -685,7 +685,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
         /// <param name="constraints">
         ///     A delegate allowing constraints to be applied over the columns configured by the 'columns' delegate above.
         /// </param>
-        /// <param name="comment"> A comment to been applied to the table. </param>
+        /// <param name="comment"> A comment to be applied to the table. </param>
         /// <returns> A <see cref="CreateTableBuilder{TColumns}" /> to allow further configuration to be chained. </returns>
         public virtual CreateTableBuilder<TColumns> CreateTable<TColumns>(
             [NotNull] string name,

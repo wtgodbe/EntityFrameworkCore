@@ -1061,6 +1061,13 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Design
                                 .Append(Code.UnknownLiteral(column.DefaultValue));
                         }
 
+                        if (column.Comment != null)
+                        {
+                            builder
+                                .Append(", comment: ")
+                                .Append(Code.Literal(operation.Comment));
+                        }
+
                         builder.Append(")");
 
                         using (builder.Indent())
