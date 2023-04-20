@@ -83,6 +83,10 @@ stages:
         enableSourceIndex: ${{ and(ne(variables['System.TeamProject'], 'public'), eq(variables['Build.SourceBranch'], 'refs/heads/main')) }}
         enableTelemetry: true
         helixRepo: dotnet/efcore
+        ${{ if and(ne(variables['System.TeamProject'], 'public'), notin(variables['Build.Reason'], 'PullRequest'), eq(parameters.runAsPublic, 'false'), or(contains(variables['Build.SourceBranch'], 'production'), eq(variables['Build.SourceBranch'], 'main'))) }}:
+          disableComponentGovernance: false
+        ${{ else }}:
+          disableComponentGovernance: true
         jobs:
           - job: Windows
             enablePublishTestResults: ${{ ne(variables.runCodeQL3000, 'true') }}
